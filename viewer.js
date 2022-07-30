@@ -25,6 +25,14 @@ import { IFCLoader } from "web-ifc-three/IFCLoader";
 const currentUrl = window.location.href;
 const url = new URL(currentUrl);
 const currentProjectID = url.searchParams.get("id");
+let preselectModel = { id: -1 };
+
+const preselectMat = new MeshLambertMaterial({
+  transparent: true,
+  opacity: 0.6,
+  color: 0xff88ff,
+  depthTest: false,
+});
 
 // Get the current project
 const currentProject = projects.find(
@@ -84,19 +92,138 @@ controls.enableDamping = true;
 controls.target.set(-2, 0, 0);
 const ifcModels = [];
 const ifcLoader = new IFCLoader();
-
+let model = null;
 // const ifcURL = URL.createObjectURL();
-ifcLoader.load(projectURL, (model) => {
-  scene.add(model);
-  ifcModels.push(model);
-});
+async function loadIfc() {
+  await ifcLoader.loadAsync(projectURL).then((m) => {
+    model = m;
+    scene.add(m);
+    ifcModels.push(m);
+    console.log("Model", model, m);
+    return m;
+  });
+}
+let spatial = null;
+async function init() {
+  await loadIfc();
+  spatial = await ifcLoader.ifcManager.getSpatialStructure(model.modelID);
+  console.log("spatial", spatial);
+  createTreeMenu(spatial);
+  threeCanvas.onmousemove = (event) => {
+    const found = cast(event)[0];
+    highlight(found, preselectMat, preselectModel);
+  };
+}
 
-// Sets up optimized picking
-ifcLoader.ifcManager.setupThreeMeshBVH(
-  computeBoundsTree,
-  disposeBoundsTree,
-  acceleratedRaycast
-);
+init();
+
+// Tree view
+
+const toggler = document.getElementsByClassName("caret");
+for (let i = 0; i < toggler.length; i++) {
+  toggler[i].onclick = () => {
+    toggler[i].parentElement
+      .querySelector(".nested")
+      .classList.toggle("active");
+    toggler[i].classList.toggle("caret-down");
+  };
+}
+
+// Spatial tree menu
+
+function createTreeMenu(ifcProject) {
+  const root = document.getElementById("tree-root");
+  removeAllChildren(root);
+  const ifcProjectNode = createNestedChild(root, ifcProject);
+  ifcProject.children.forEach((child) => {
+    constructTreeMenuNode(ifcProjectNode, child);
+  });
+}
+
+function nodeToString(node) {
+  return `${node.type} - ${node.expressID}`;
+}
+
+function constructTreeMenuNode(parent, node) {
+  const children = node.children;
+  if (children.length === 0) {
+    createSimpleChild(parent, node);
+    return;
+  }
+  const nodeElement = createNestedChild(parent, node);
+  children.forEach((child) => {
+    constructTreeMenuNode(nodeElement, child);
+  });
+}
+
+function createNestedChild(parent, node) {
+  const content = nodeToString(node);
+  const root = document.createElement("li");
+  createTitle(root, content);
+  const childrenContainer = document.createElement("ul");
+  childrenContainer.classList.add("nested");
+  root.appendChild(childrenContainer);
+  parent.appendChild(root);
+  return childrenContainer;
+}
+
+function createTitle(parent, content) {
+  const title = document.createElement("span");
+  title.classList.add("caret");
+  title.onclick = () => {
+    title.parentElement.querySelector(".nested").classList.toggle("active");
+    title.classList.toggle("caret-down");
+  };
+  title.textContent = content;
+  parent.appendChild(title);
+}
+
+function createSimpleChild(parent, node) {
+  const content = nodeToString(node);
+  const childNode = document.createElement("li");
+  childNode.classList.add("leaf-node");
+  childNode.textContent = content;
+  parent.appendChild(childNode);
+
+  childNode.onmouseenter = async () => {
+    removeTmpHighlights();
+    childNode.classList.add("tmphighlight");
+    highlightFromSpatial(node.expressID);
+  };
+
+  childNode.onclick = async () => {
+    removeHighlights();
+    childNode.classList.add("highlight");
+    highlightFromSpatial(node.expressID);
+    // ifcLoader.ifcManager.prepickIfcItemsByID(0, [node.expressID]);
+  };
+}
+
+function removeHighlights() {
+  const highlighted = document.getElementsByClassName("highlight");
+  for (let h of highlighted) {
+    if (h) {
+      console.log(h);
+      h.classList.remove("highlight");
+    }
+  }
+}
+
+function removeTmpHighlights() {
+  const highlighted = document.getElementsByClassName("tmphighlight");
+  for (let h of highlighted) {
+    if (h) {
+      console.log(h);
+      h.classList.remove("tmphighlight");
+    }
+  }
+}
+
+function removeAllChildren(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
 
 const raycaster = new Raycaster();
 raycaster.firstHitOnly = true;
@@ -122,43 +249,41 @@ function cast(event) {
 }
 
 function pick(event) {
+  // console.log("pick", event);
   const found = cast(event)[0];
   if (found) {
     const index = found.faceIndex;
     const geometry = found.object.geometry;
     const ifc = ifcLoader.ifcManager;
-    const id = ifc.getExpressId(geometry, index);
+    const id = ifcLoader.ifcManager.getExpressId(geometry, index);
     console.log(id);
   }
 }
 
-threeCanvas.ondblclick = (event) => pick(event);
-
-const ifc = ifcLoader.ifcManager;
-// Creates subset material
-const preselectMat = new MeshLambertMaterial({
-  transparent: true,
-  opacity: 0.6,
-  color: 0xff88ff,
-  depthTest: false,
-});
-// Reference to the previous selection
-let preselectModel = { id: -1 };
-
-function highlight(event, material, model) {
-  const found = cast(event)[0];
+function highlightFromSpatial(id) {
+  ifcLoader.ifcManager.createSubset({
+    modelID: model.modelID,
+    ids: [id],
+    material: preselectMat,
+    scene: scene,
+    removePrevious: true,
+  });
+}
+function highlight(found, material, model) {
+  const modelId = model.modelID;
   if (found) {
     // Gets model ID
-    model.id = found.object.modelID;
+    console.log(found);
+    const modelId = found.object.modelID;
 
     // Gets Express ID
     const index = found.faceIndex;
     const geometry = found.object.geometry;
-    const id = ifc.getExpressId(geometry, index);
+    const id = ifcLoader.ifcManager.getExpressId(geometry, index);
 
     // Creates subset
     ifcLoader.ifcManager.createSubset({
-      modelID: model.id,
+      modelID: modelId,
       ids: [id],
       material: material,
       scene: scene,
@@ -166,11 +291,11 @@ function highlight(event, material, model) {
     });
   } else {
     // Removes previous highlight
-    ifc.removeSubset(model.id, material);
+    ifcLoader.ifcManager.removeSubset(modelId, material);
   }
 }
 
-window.onmousemove = (event) => highlight(event, preselectMat, preselectModel);
+threeCanvas.ondblclick = (event) => pick(event);
 
 //Animation loop
 const animate = () => {
