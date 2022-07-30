@@ -198,9 +198,14 @@ iframe {
 
 .ifc-tree-menu {
   position: absolute;
-  overflow-y: scroll;
   background-color: white;
-  height: 100vh;
+
+  z-index: 999999999;
+  border-radius: 1rem;
+  top: 1rem;
+  left: 1rem;
+  background-color: lightgray;
+  max-height: 80vh;
 }
 
 li ul {
@@ -218,14 +223,8 @@ ul,
 #myUL {
   margin: 0.5rem;
   padding: 1rem;
-  position: absolute;
   z-index: 999999999;
-  border-radius: 1rem;
-  top: 1rem;
-  left: 1rem;
-  background-color: grey;
   overflow-y: auto;
-  max-height: 80vh;
 }
 
 /* Style the caret/arrow */
