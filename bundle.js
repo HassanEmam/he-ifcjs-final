@@ -91130,9 +91130,9 @@ let preselectModel = { id: -1 };
 
 const preselectMat = new MeshLambertMaterial({
   transparent: true,
-  opacity: 0.6,
+  opacity: 0.9,
   color: 0xff88ff,
-  depthTest: false,
+  depthTest: true,
 });
 
 // Get the current project
