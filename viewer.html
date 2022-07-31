@@ -89,8 +89,24 @@
         <li id="tree-root"></li>
       </ul>
     </div>
+    <div id="properties" class="properties">
+      <div class="tab">
+        <button class="tablinks" value="Attributes">Attributes</button>
+        <button class="tablinks" value="psets">Properties</button>
+        <button class="tablinks" value="Materials">Materials</button>
+      </div>
+      <div id="Attributes" class="tabcontent"></div>
 
-    <div id="model-viewer-container" frameborder="0"></div>
+      <div id="psets" class="tabcontent"></div>
+      <div id="Materials" class="tabcontent"></div>
+    </div>
+
+    <div id="model-viewer-container" frameborder="0">
+      <!-- <div class="viewcube">
+        <div class="boxfront">Front</div>
+        <div class="boxleft">Left</div>
+      </div> -->
+    </div>
     <script type="module" src="./bundle.js"></script>
   </body>
 </html>

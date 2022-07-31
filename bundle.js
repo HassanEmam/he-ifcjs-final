@@ -91127,7 +91127,8 @@ const currentUrl = window.location.href;
 const url = new URL(currentUrl);
 const currentProjectID = url.searchParams.get("id");
 let preselectModel = { id: -1 };
-
+const propertiesDiv = document.getElementById("properties");
+propertiesDiv.style.display = "none";
 const preselectMat = new MeshLambertMaterial({
   transparent: true,
   opacity: 0.9,
@@ -91139,7 +91140,6 @@ const preselectMat = new MeshLambertMaterial({
 const currentProject = projects.find(
   (project) => project.id === currentProjectID
 );
-console.log("PROJECT", currentProject.url);
 const projectURL = currentProject.url;
 const title = document.getElementById("title");
 title.innerText = currentProject.name;
@@ -91174,6 +91174,7 @@ scene.add(directionalLight);
 //Sets up the renderer, fetching the canvas of the HTML
 // const threeCanvas = document.getElementById("three-canvas");
 const renderer = new WebGLRenderer();
+renderer.setClearColor(0xffffff);
 threeCanvas.appendChild(renderer.domElement);
 renderer.setSize(size.width, size.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -91200,7 +91201,6 @@ async function loadIfc() {
     model = m;
     scene.add(m);
     ifcModels.push(m);
-    console.log("Model", model, m);
     return m;
   });
 }
@@ -91208,12 +91208,13 @@ let spatial = null;
 async function init() {
   await loadIfc();
   spatial = await ifcLoader.ifcManager.getSpatialStructure(model.modelID);
-  console.log("spatial", spatial);
   createTreeMenu(spatial);
   threeCanvas.onmousemove = (event) => {
     const found = cast(event)[0];
     highlight(found, preselectMat, preselectModel);
   };
+  const ulItem = document.getElementById("myUL");
+  ulItem.animate({ scrollTop: ulItem.scrollHeight }, 1000);
 }
 
 init();
@@ -91282,6 +91283,7 @@ function createTitle(parent, content) {
 function createSimpleChild(parent, node) {
   const content = nodeToString(node);
   const childNode = document.createElement("li");
+  childNode.setAttribute("id", node.expressID);
   childNode.classList.add("leaf-node");
   childNode.textContent = content;
   parent.appendChild(childNode);
@@ -91296,6 +91298,8 @@ function createSimpleChild(parent, node) {
     removeHighlights();
     childNode.classList.add("highlight");
     highlightFromSpatial(node.expressID);
+    selectedElementId = node.expressID;
+    updateProperties();
     // ifcLoader.ifcManager.prepickIfcItemsByID(0, [node.expressID]);
   };
 }
@@ -91304,7 +91308,6 @@ function removeHighlights() {
   const highlighted = document.getElementsByClassName("highlight");
   for (let h of highlighted) {
     if (h) {
-      console.log(h);
       h.classList.remove("highlight");
     }
   }
@@ -91314,7 +91317,6 @@ function removeTmpHighlights() {
   const highlighted = document.getElementsByClassName("tmphighlight");
   for (let h of highlighted) {
     if (h) {
-      console.log(h);
       h.classList.remove("tmphighlight");
     }
   }
@@ -91349,15 +91351,17 @@ function cast(event) {
   return raycaster.intersectObjects(ifcModels);
 }
 
-function pick(event) {
-  // console.log("pick", event);
+let selectedElementId = null;
+async function pick(event) {
   const found = cast(event)[0];
   if (found) {
     const index = found.faceIndex;
     const geometry = found.object.geometry;
     ifcLoader.ifcManager;
     const id = ifcLoader.ifcManager.getExpressId(geometry, index);
-    console.log(id);
+    selectedElementId = id;
+    await updateProperties();
+    propertiesDiv.style.display = "block";
   }
 }
 
@@ -91374,7 +91378,6 @@ function highlight(found, material, model) {
   const modelId = model.modelID;
   if (found) {
     // Gets model ID
-    console.log(found);
     const modelId = found.object.modelID;
 
     // Gets Express ID
@@ -91412,5 +91415,176 @@ window.addEventListener("resize", () => {
   (size.width = window.innerWidth), (size.height = window.innerHeight);
   camera.aspect = size.width / size.height;
   camera.updateProjectionMatrix();
+
   renderer.setSize(size.width, size.height);
 });
+
+const tabs = document.getElementsByClassName("tablinks");
+
+for (const tab of tabs) {
+  tab.addEventListener("click", (event) => {
+    openTab(event, tab.value);
+  });
+}
+
+async function openTab(evt, cityName) {
+  // Declare all variables
+  updateProperties();
+  var i, tabcontent, tablinks;
+
+  // Get all elements with class="tabcontent" and hide them
+  tabcontent = document.getElementsByClassName("tabcontent");
+  for (i = 0; i < tabcontent.length; i++) {
+    tabcontent[i].style.display = "none";
+  }
+
+  // Get all elements with class="tablinks" and remove the class "active"
+  tablinks = document.getElementsByClassName("tablinks");
+  for (i = 0; i < tablinks.length; i++) {
+    tablinks[i].className = tablinks[i].className.replace(" active", "");
+  }
+
+  const activeTab = document.getElementById(cityName);
+
+  // Show the current tab, and add an "active" class to the button that opened the tab
+  activeTab.style.display = "block";
+  evt.currentTarget.className += " active";
+}
+
+async function updateProperties() {
+  const attributesTab = document.getElementById("Attributes");
+  const psetsTab = document.getElementById("psets");
+  const materialsTab = document.getElementById("Materials");
+  const psets = await ifcLoader.ifcManager.getPropertySets(
+    model.modelID,
+    selectedElementId,
+    true
+  );
+
+  const npropDiv = document.createElement("div");
+  psetsTab.innerHTML = "";
+  psetsTab.appendChild(await psets2html(psets));
+  psetsTab.appendChild(npropDiv);
+
+  const props = await ifcLoader.ifcManager.getItemProperties(
+    model.modelID,
+    selectedElementId,
+    true
+  );
+  const propDiv = document.createElement("div");
+  attributesTab.innerHTML = "";
+  propDiv.appendChild(await attr2html(props));
+  attributesTab.appendChild(propDiv);
+  activateCollapsible();
+
+  const materialprop = await ifcLoader.ifcManager.getMaterialsProperties(
+    model.modelID,
+    selectedElementId,
+    true
+  );
+  const matDive = document.createElement("div");
+  materialsTab.innerHTML = "";
+  matDive.appendChild(await material2html(materialprop));
+  materialsTab.appendChild(matDive);
+  console.log(materialprop);
+}
+
+async function material2html(materials) {
+  const div = document.createElement("div");
+  const table = document.createElement("table");
+  const header = document.createElement("tr");
+  header.innerHTML = `<th>Material</th><th>Thickness</th>`;
+
+  for (const material of materials) {
+    // console.log(material.ForLayerSet.MaterialLayers);
+    if (material.ForLayerSet) {
+      table.appendChild(header);
+      for (const mat of material.ForLayerSet.MaterialLayers) {
+        console.log(mat.Material.Name.value, mat.LayerThickness.value);
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${mat.Material.Name.value}</td><td>${
+          Math.round(mat.LayerThickness.value * 1000) / 1000
+        }</td>`;
+        table.appendChild(row);
+      }
+    }
+  }
+  div.appendChild(table);
+  console.log(div);
+  return div;
+}
+
+async function attr2html(element) {
+  const html = document.createElement("table");
+  const header = document.createElement("tr");
+  header.innerHTML = `<th>Name</th><th>Value</th>`;
+  html.appendChild(header);
+  const guid = element.GlobalId.value;
+  const guidRow = document.createElement("tr");
+  guidRow.innerHTML = `<td>GlobalId</td><td>${guid}</td>`;
+  const expressID = element.expressID;
+  const expressIDRow = document.createElement("tr");
+  expressIDRow.innerHTML = `<td>ExpressId</td><td>${expressID}</td>`;
+  html.appendChild(guidRow);
+  html.appendChild(expressIDRow);
+  const name = element.Name.value;
+  const nameRow = document.createElement("tr");
+  nameRow.innerHTML = `<td>Name</td><td>${name}</td>`;
+  html.appendChild(nameRow);
+  const ifcType = element.__proto__.constructor.name;
+  const ifcTypeRow = document.createElement("tr");
+  ifcTypeRow.innerHTML = `<td>IfcType</td><td>${ifcType}</td>`;
+  html.appendChild(ifcTypeRow);
+  const type = element.ObjectType.value;
+  const typeRow = document.createElement("tr");
+  typeRow.innerHTML = `<td>Type</td><td>${type}</td>`;
+  html.appendChild(typeRow);
+  const tag = element.Tag.value;
+  const tagRow = document.createElement("tr");
+  tagRow.innerHTML = `<td>Tag</td><td>${tag}</td>`;
+  html.appendChild(tagRow);
+
+  return html;
+}
+
+async function psets2html(psets) {
+  const html = document.createElement("div");
+  for (const pset of psets) {
+    const psetDiv = document.createElement("div");
+    psetDiv.setAttribute("class", "collapsible");
+    psetDiv.innerHTML = `${pset.Name.value}`;
+
+    const psetContent = document.createElement("div");
+    psetContent.setAttribute("class", "col-content");
+    const psetTable = document.createElement("table");
+    const header = document.createElement("tr");
+    header.innerHTML = `<th>Name</th><th>Value</th>`;
+    psetTable.appendChild(header);
+    for (const prop of pset.HasProperties) {
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${prop.Name.value ? prop.Name.value : ""}</td>
+      <td>${prop.NominalValue ? prop.NominalValue.value : ""}</td>`;
+      psetTable.appendChild(row);
+    }
+    html.appendChild(psetDiv);
+    psetContent.appendChild(psetTable);
+    html.appendChild(psetContent);
+  }
+  return html;
+}
+
+function activateCollapsible() {
+  var coll = document.getElementsByClassName("collapsible");
+  var i;
+  for (i = 0; i < coll.length; i++) {
+    coll[i].addEventListener("click", function () {
+      this.classList.toggle("colactive");
+      var content = this.nextElementSibling;
+      if (content.style.display === "block") {
+        content.style.display = "none";
+      } else {
+        content.style.display = "block";
+      }
+    });
+  }
+}
